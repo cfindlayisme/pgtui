@@ -46,9 +46,10 @@ type App struct {
 	br  *browser.Browser
 }
 
-// NewApp connects to dsn and builds the full application.
-func NewApp(ctx context.Context, dsn string) (*App, error) {
-	conn, err := db.Connect(ctx, dsn)
+// NewApp connects to dsn (which must already point at database) and
+// builds the full application.
+func NewApp(ctx context.Context, dsn, database string) (*App, error) {
+	conn, err := db.Connect(ctx, dsn, database)
 	if err != nil {
 		return nil, err
 	}

@@ -8,19 +8,35 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// pgxConn is the subset of *pgx.Conn this package depends on, narrow
+// enough that tests can substitute a mock instead of a live connection.
+type pgxConn interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Close(ctx context.Context) error
+}
+
+// connectFn opens a new connection. It's a variable, not a direct call to
+// pgx.Connect, so tests can substitute a mock without touching the network.
+var connectFn = func(ctx context.Context, dsn string) (pgxConn, error) {
+	return pgx.Connect(ctx, dsn)
+}
+
 // Conn wraps a single live connection to a Postgres server/database.
 type Conn struct {
 	dsn  string
-	conn *pgx.Conn
+	conn pgxConn
 	db   string
 }
 
-func Connect(ctx context.Context, dsn string) (*Conn, error) {
-	conn, err := pgx.Connect(ctx, dsn)
+// Connect opens dsn, which is expected to already point at dbname (e.g.
+// via Config.DSN()). dbname is recorded so SwitchDatabase can no-op when
+// asked to switch to the database it's already on.
+func Connect(ctx context.Context, dsn, dbname string) (*Conn, error) {
+	conn, err := connectFn(ctx, dsn)
 	if err != nil {
 		return nil, err
 	}
-	return &Conn{dsn: dsn, conn: conn, db: conn.Config().Database}, nil
+	return &Conn{dsn: dsn, conn: conn, db: dbname}, nil
 }
 
 func (c *Conn) Close(ctx context.Context) {
@@ -39,7 +55,7 @@ func (c *Conn) SwitchDatabase(ctx context.Context, dbname string) error {
 	if err != nil {
 		return err
 	}
-	newConn, err := pgx.Connect(ctx, newDSN)
+	newConn, err := connectFn(ctx, newDSN)
 	if err != nil {
 		return err
 	}
@@ -70,7 +86,7 @@ func (c *Conn) ListTables(ctx context.Context, schema string) ([]string, error) 
 		 WHERE table_schema = $1 ORDER BY table_name`, schema)
 }
 
-func queryStrings(ctx context.Context, conn *pgx.Conn, sql string, args ...any) ([]string, error) {
+func queryStrings(ctx context.Context, conn pgxConn, sql string, args ...any) ([]string, error) {
 	rows, err := conn.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err

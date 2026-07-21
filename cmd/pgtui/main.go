@@ -26,7 +26,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	app, err := ui.NewApp(ctx, cfg.DSN())
+	app, err := ui.NewApp(ctx, cfg.DSN(), cfg.Database)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "pgtui: failed to connect:", err)
 		os.Exit(1)

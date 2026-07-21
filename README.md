@@ -66,7 +66,13 @@ go test ./...
 ```
 
 Unit tests cover the pure utilities (`config.Load`, `db.WithDatabase`,
-`db.FormatValue`, `browser.QuoteIdent`/`TableQuery`); functional tests
-cover `browser.Browser`'s orchestration against a fake `DB`; and the `ui`
+`db.FormatValue`, `browser.QuoteIdent`/`TableQuery`). `internal/db`'s
+actual Postgres-facing methods (`ListDatabases`/`ListSchemas`/
+`ListTables`/`RunQuery`/`Connect`/`SwitchDatabase`) are tested against a
+mocked `pgx` connection — SQL/args assertions and row data via
+[`pgxmock`](https://github.com/pashagolub/pgxmock) for query building, and
+a small hand-rolled fake for the connect/reconnect/close lifecycle — so
+none of it needs a live database. Functional tests cover
+`browser.Browser`'s orchestration against a fake `DB`; and the `ui`
 package tests exercise the tree/table/query-bar wiring end-to-end against
 the same kind of fake, without needing a live database or terminal.
