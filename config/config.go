@@ -18,6 +18,7 @@ type Config struct {
 	Password string
 	Database string
 	SSLMode  string
+	Lang     string
 }
 
 // DSN renders cfg as a postgres:// connection string.
@@ -61,6 +62,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	password := fs.String("password", "", "Postgres password (or PGPASSWORD)")
 	dbname := fs.String("dbname", "", "Postgres database name (or PGDATABASE)")
 	sslmode := fs.String("sslmode", "", "Postgres sslmode (or PGSSLMODE)")
+	lang := fs.String("lang", "", "UI language (or PGTUI_LANG); defaults to en")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -73,6 +75,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 		Password: firstNonEmpty(*password, getenv("PGPASSWORD")),
 		Database: firstNonEmpty(*dbname, getenv("PGDATABASE")),
 		SSLMode:  firstNonEmpty(*sslmode, getenv("PGSSLMODE")),
+		Lang:     firstNonEmpty(*lang, getenv("PGTUI_LANG"), "en"),
 	}
 	if cfg.SSLMode == "" {
 		cfg.SSLMode = "prefer"

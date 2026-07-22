@@ -21,7 +21,7 @@ func TestLoad_FromFlags(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Config{
 		Host: "localhost", Port: "5432", User: "alice",
-		Password: "secret", Database: "app", SSLMode: "prefer",
+		Password: "secret", Database: "app", SSLMode: "prefer", Lang: "en",
 	}, cfg)
 }
 
@@ -36,7 +36,7 @@ func TestLoad_FromEnv(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Config{
 		Host: "db.internal", Port: "6543", User: "bob",
-		Password: "hunter2", Database: "billing", SSLMode: "require",
+		Password: "hunter2", Database: "billing", SSLMode: "require", Lang: "en",
 	}, cfg)
 }
 
@@ -58,6 +58,44 @@ func TestLoad_DefaultsSSLModeToPrefer(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "prefer", cfg.SSLMode)
+}
+
+func TestLoad_DefaultsLangToEnglish(t *testing.T) {
+	cfg, err := Load(
+		[]string{"--host=h", "--port=5432", "--user=u", "--dbname=d"},
+		envLookup(nil),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "en", cfg.Lang)
+}
+
+func TestLoad_LangFromFlag(t *testing.T) {
+	cfg, err := Load(
+		[]string{"--host=h", "--port=5432", "--user=u", "--dbname=d", "--lang=fr"},
+		envLookup(nil),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "fr", cfg.Lang)
+}
+
+func TestLoad_LangFromEnv(t *testing.T) {
+	env := map[string]string{"PGHOST": "h", "PGPORT": "5432", "PGUSER": "u", "PGDATABASE": "d", "PGTUI_LANG": "fr"}
+
+	cfg, err := Load(nil, envLookup(env))
+
+	require.NoError(t, err)
+	assert.Equal(t, "fr", cfg.Lang)
+}
+
+func TestLoad_LangFlagOverridesEnv(t *testing.T) {
+	env := map[string]string{"PGHOST": "h", "PGPORT": "5432", "PGUSER": "u", "PGDATABASE": "d", "PGTUI_LANG": "fr"}
+
+	cfg, err := Load([]string{"--lang=de"}, envLookup(env))
+
+	require.NoError(t, err)
+	assert.Equal(t, "de", cfg.Lang)
 }
 
 func TestLoad_MissingRequiredFields(t *testing.T) {

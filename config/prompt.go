@@ -5,12 +5,14 @@ import (
 	"os"
 
 	"golang.org/x/term"
+
+	"github.com/cfindlayisme/pgtui/translations"
 )
 
 // PromptPassword reads a password from the controlling terminal without
 // echoing it, for use as ResolvePassword's promptFn.
 func PromptPassword() (string, error) {
-	fmt.Fprint(os.Stderr, "Password: ")
+	fmt.Fprint(os.Stderr, translations.T("prompt.password"))
 	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {

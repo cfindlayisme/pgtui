@@ -15,6 +15,7 @@ import (
 
 	"github.com/cfindlayisme/pgtui/browser"
 	"github.com/cfindlayisme/pgtui/db"
+	"github.com/cfindlayisme/pgtui/translations"
 )
 
 type nodeKind int
@@ -104,7 +105,7 @@ func newAppWithBrowser(ctx context.Context, br *browser.Browser) (*App, error) {
 }
 
 func (a *App) buildTree() {
-	root := tview.NewTreeNode("Databases")
+	root := tview.NewTreeNode(translations.T("ui.tree_root"))
 	a.tree = tview.NewTreeView().
 		SetRoot(root).
 		SetCurrentNode(root).
@@ -117,18 +118,18 @@ func (a *App) buildIndexPanel() {
 	a.indexPanel = tview.NewTextView().
 		SetDynamicColors(true).
 		SetWrap(true)
-	a.indexPanel.SetBorder(true).SetTitle(" Indexes ")
+	a.indexPanel.SetBorder(true).SetTitle(translations.T("ui.indexes_title"))
 }
 
 func (a *App) buildTable() {
 	a.table = tview.NewTable().SetFixed(1, 0)
 	a.table.SetSelectable(true, false)
-	a.table.SetBorder(true).SetTitle(" Results ")
+	a.table.SetBorder(true).SetTitle(translations.T("ui.results_title"))
 }
 
 func (a *App) buildQueryBar() {
 	a.queryBar = tview.NewInputField().SetLabel("SQL> ")
-	a.queryBar.SetBorder(true).SetTitle(" Query  [Enter: run  Esc: cancel  ':' to focus  Tab: switch panel  q: quit] ")
+	a.queryBar.SetBorder(true).SetTitle(translations.T("ui.query_title"))
 	a.queryBar.SetDoneFunc(a.onQueryBarDone)
 }
 
@@ -307,7 +308,7 @@ func (a *App) selectTable(ref *nodeData) {
 }
 
 func (a *App) loadIndexes(ref *nodeData) {
-	a.indexPanel.SetTitle(fmt.Sprintf(" Indexes: %s.%s ", ref.schema, ref.table))
+	a.indexPanel.SetTitle(translations.T("ui.indexes_title_for", ref.schema, ref.table))
 
 	indexes, err := a.br.Indexes(a.ctx, ref.dbname, ref.schema, ref.table)
 	if err != nil {
@@ -315,7 +316,7 @@ func (a *App) loadIndexes(ref *nodeData) {
 		return
 	}
 	if len(indexes) == 0 {
-		a.indexPanel.SetText("[gray]no indexes")
+		a.indexPanel.SetText("[gray]" + translations.T("ui.no_indexes"))
 		return
 	}
 
@@ -335,19 +336,19 @@ func (a *App) showTableOptions(ref *nodeData) {
 	a.optionsList.Clear()
 	a.optionsList.SetTitle(fmt.Sprintf(" %s.%s ", ref.schema, ref.table))
 
-	a.optionsList.AddItem("Preview 100 rows", "SELECT * ... LIMIT 100", '1', func() {
+	a.optionsList.AddItem(translations.T("ui.option.preview_100"), translations.T("ui.option.preview_100_desc"), '1', func() {
 		a.runQueryForTable(ref, browser.PreviewQuery(ref.schema, ref.table, 100))
 	})
-	a.optionsList.AddItem("Preview 1000 rows", "SELECT * ... LIMIT 1000", '2', func() {
+	a.optionsList.AddItem(translations.T("ui.option.preview_1000"), translations.T("ui.option.preview_1000_desc"), '2', func() {
 		a.runQueryForTable(ref, browser.PreviewQuery(ref.schema, ref.table, 1000))
 	})
-	a.optionsList.AddItem("Row count", "SELECT COUNT(*)", '3', func() {
+	a.optionsList.AddItem(translations.T("ui.option.row_count"), translations.T("ui.option.row_count_desc"), '3', func() {
 		a.runQueryForTable(ref, browser.CountQuery(ref.schema, ref.table))
 	})
-	a.optionsList.AddItem("Columns", "name, type, nullability, default", '4', func() {
+	a.optionsList.AddItem(translations.T("ui.option.columns"), translations.T("ui.option.columns_desc"), '4', func() {
 		a.runQueryForTable(ref, browser.ColumnsQuery(ref.schema, ref.table))
 	})
-	a.optionsList.AddItem("Cancel", "", 'c', a.cancelTableOptions)
+	a.optionsList.AddItem(translations.T("ui.option.cancel"), "", 'c', a.cancelTableOptions)
 
 	a.optionsOpen = true
 	a.pages.ShowPage("options")
@@ -426,12 +427,12 @@ func (a *App) setResults(result *db.QueryResult) {
 			a.table.SetCell(r+1, c, tview.NewTableCell(val))
 		}
 	}
-	a.table.SetTitle(fmt.Sprintf(" Results (%d rows) ", len(result.Rows)))
+	a.table.SetTitle(translations.T("ui.results_title_rows", len(result.Rows)))
 	a.table.ScrollToBeginning()
 }
 
 func (a *App) showError(err error) {
 	a.table.Clear()
-	a.table.SetTitle(" Results ")
-	a.table.SetCell(0, 0, tview.NewTableCell("Error: "+err.Error()).SetTextColor(tcell.ColorRed))
+	a.table.SetTitle(translations.T("ui.results_title"))
+	a.table.SetCell(0, 0, tview.NewTableCell(translations.T("ui.error_prefix")+err.Error()).SetTextColor(tcell.ColorRed))
 }

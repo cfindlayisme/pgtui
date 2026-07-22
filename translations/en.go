@@ -1,0 +1,24 @@
+package translations
+
+var en = map[string]string{
+	"prompt.password":             "Password: ",
+	"main.password_error":         "failed to read password: %v",
+	"main.connect_error":          "failed to connect: %v",
+	"ui.tree_root":                "Databases",
+	"ui.indexes_title":            " Indexes ",
+	"ui.indexes_title_for":        " Indexes: %s.%s ",
+	"ui.no_indexes":               "no indexes",
+	"ui.results_title":            " Results ",
+	"ui.results_title_rows":       " Results (%d rows) ",
+	"ui.query_title":              " Query  [Enter: run  Esc: cancel  ':' to focus  Tab: switch panel  q: quit] ",
+	"ui.error_prefix":             "Error: ",
+	"ui.option.preview_100":       "Preview 100 rows",
+	"ui.option.preview_100_desc":  "SELECT * ... LIMIT 100",
+	"ui.option.preview_1000":      "Preview 1000 rows",
+	"ui.option.preview_1000_desc": "SELECT * ... LIMIT 1000",
+	"ui.option.row_count":         "Row count",
+	"ui.option.row_count_desc":    "SELECT COUNT(*)",
+	"ui.option.columns":           "Columns",
+	"ui.option.columns_desc":      "name, type, nullability, default",
+	"ui.option.cancel":            "Cancel",
+}

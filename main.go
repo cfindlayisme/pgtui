@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/cfindlayisme/pgtui/config"
+	"github.com/cfindlayisme/pgtui/translations"
 	"github.com/cfindlayisme/pgtui/ui"
 )
 
@@ -18,17 +19,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "pgtui:", err)
 		os.Exit(1)
 	}
+	translations.SetLocale(cfg.Lang)
 
 	cfg, err = config.ResolvePassword(cfg, config.PromptPassword)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "pgtui: failed to read password:", err)
+		fmt.Fprintln(os.Stderr, "pgtui:", translations.T("main.password_error", err))
 		os.Exit(1)
 	}
 
 	ctx := context.Background()
 	app, err := ui.NewApp(ctx, cfg.DSN(), cfg.Database)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "pgtui: failed to connect:", err)
+		fmt.Fprintln(os.Stderr, "pgtui:", translations.T("main.connect_error", err))
 		os.Exit(1)
 	}
 
