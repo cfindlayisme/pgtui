@@ -129,18 +129,13 @@ func (a *App) buildTable() {
 func (a *App) buildQueryBar() {
 	a.queryBar = tview.NewInputField().SetLabel("SQL> ")
 	a.queryBar.SetBorder(true).SetTitle(" Query  [Enter: run  Esc: cancel  ':' to focus  Tab: switch panel  q: quit] ")
-	a.queryBar.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			a.runQuery(a.queryBar.GetText())
-		}
-		a.tv.SetFocus(a.tree)
-	})
+	a.queryBar.SetDoneFunc(a.onQueryBarDone)
 }
 
 func (a *App) buildOptionsList() {
 	a.optionsList = tview.NewList().ShowSecondaryText(true)
 	a.optionsList.SetBorder(true)
-	a.optionsList.SetDoneFunc(a.hideTableOptions)
+	a.optionsList.SetDoneFunc(a.cancelTableOptions)
 }
 
 func (a *App) buildLayout() {
@@ -352,16 +347,25 @@ func (a *App) showTableOptions(ref *nodeData) {
 	a.optionsList.AddItem("Columns", "name, type, nullability, default", '4', func() {
 		a.runQueryForTable(ref, browser.ColumnsQuery(ref.schema, ref.table))
 	})
-	a.optionsList.AddItem("Cancel", "", 'c', a.hideTableOptions)
+	a.optionsList.AddItem("Cancel", "", 'c', a.cancelTableOptions)
 
 	a.optionsOpen = true
 	a.pages.ShowPage("options")
 	a.tv.SetFocus(a.optionsList)
 }
 
+// hideTableOptions closes the modal without deciding where focus goes
+// next -- callers do that, since it differs between cancelling (back to
+// the tree) and picking an option (on to the results).
 func (a *App) hideTableOptions() {
 	a.optionsOpen = false
 	a.pages.HidePage("options")
+}
+
+// cancelTableOptions is what Esc or "Cancel" in the options modal does:
+// close it and return focus to the tree, without running anything.
+func (a *App) cancelTableOptions() {
+	a.hideTableOptions()
 	a.tv.SetFocus(a.tree)
 }
 
@@ -371,9 +375,23 @@ func (a *App) runQueryForTable(ref *nodeData, query string) {
 	result, err := a.br.RunQuery(a.ctx, ref.dbname, query)
 	if err != nil {
 		a.showError(err)
+		a.tv.SetFocus(a.table)
 		return
 	}
 	a.setResults(result)
+	a.tv.SetFocus(a.table)
+}
+
+// onQueryBarDone handles Enter/Esc in the query bar: Enter runs whatever
+// SQL is typed and jumps focus to the results; anything else (Esc) just
+// returns focus to the tree without running anything.
+func (a *App) onQueryBarDone(key tcell.Key) {
+	if key == tcell.KeyEnter {
+		a.runQuery(a.queryBar.GetText())
+		a.tv.SetFocus(a.table)
+		return
+	}
+	a.tv.SetFocus(a.tree)
 }
 
 // runQuery executes q against whichever database is currently connected

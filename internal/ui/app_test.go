@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -184,6 +185,7 @@ func TestTableOptions_Preview100RowsRunsDefaultQuery(t *testing.T) {
 	assert.Equal(t, "id", a.table.GetCell(0, 0).Text)
 	assert.Equal(t, "bob", a.table.GetCell(1, 1).Text)
 	assert.Equal(t, "alice", a.table.GetCell(2, 1).Text)
+	assert.Same(t, a.table, a.tv.GetFocus(), "should jump straight to the results after picking an option")
 }
 
 func TestTableOptions_Preview1000Rows(t *testing.T) {
@@ -254,6 +256,7 @@ func TestTableOptions_CancelClosesPromptWithoutQuerying(t *testing.T) {
 
 	assert.False(t, a.optionsOpen)
 	assert.Empty(t, a.queryBar.GetText())
+	assert.Same(t, a.tree, a.tv.GetFocus(), "cancelling should return focus to the tree, not the results")
 }
 
 func TestTableOptions_QueryErrorShowsInResultsPane(t *testing.T) {
@@ -270,6 +273,7 @@ func TestTableOptions_QueryErrorShowsInResultsPane(t *testing.T) {
 	a.optionsList.GetItemSelectedFunc(0)()
 
 	assert.Contains(t, a.table.GetCell(0, 0).Text, "permission denied")
+	assert.Same(t, a.table, a.tv.GetFocus(), "should still land on the results even when the query errored")
 }
 
 func TestRunQuery_CustomSQLFromQueryBar(t *testing.T) {
@@ -284,6 +288,30 @@ func TestRunQuery_CustomSQLFromQueryBar(t *testing.T) {
 	assert.Equal(t, "SELECT 1 AS one", a.queryBar.GetText())
 	assert.Equal(t, "one", a.table.GetCell(0, 0).Text)
 	assert.Equal(t, "1", a.table.GetCell(1, 0).Text)
+}
+
+func TestOnQueryBarDone_EnterRunsQueryAndFocusesResults(t *testing.T) {
+	want := &db.QueryResult{Columns: []string{"one"}, Rows: [][]string{{"1"}}}
+	fake := &fakeDB{
+		results: map[string]*db.QueryResult{"SELECT 1 AS one": want},
+	}
+	a := newTestApp(t, fake)
+	a.queryBar.SetText("SELECT 1 AS one")
+
+	a.onQueryBarDone(tcell.KeyEnter)
+
+	assert.Equal(t, "one", a.table.GetCell(0, 0).Text)
+	assert.Same(t, a.table, a.tv.GetFocus())
+}
+
+func TestOnQueryBarDone_EscReturnsFocusToTreeWithoutRunning(t *testing.T) {
+	fake := &fakeDB{}
+	a := newTestApp(t, fake)
+	a.queryBar.SetText("SELECT should not run")
+
+	a.onQueryBarDone(tcell.KeyEsc)
+
+	assert.Same(t, a.tree, a.tv.GetFocus())
 }
 
 func TestRunQuery_BlankInputIsIgnored(t *testing.T) {

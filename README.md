@@ -44,10 +44,12 @@ PGHOST=localhost PGPORT=5432 PGUSER=postgres PGDATABASE=postgres ./pgtui
 - `Enter` on a table pops up a menu of common queries instead of guessing
   which one you want: preview 100 rows, preview 1000 rows, row count, or
   column list (name/type/nullable/default). Pick one with `1`-`4`/arrows+
-  `Enter`, or `Esc`/`Cancel` to back out without running anything.
+  `Enter` and focus jumps straight to the results; `Esc`/`Cancel` backs
+  out to the tree without running anything.
 - Right panel: results of the last query.
 - Bottom bar: always shows the query that produced the current results.
-  Press `:` to focus it, type any SQL, and press `Enter` to run it.
+  Press `:` to focus it, type any SQL, and press `Enter` to run it --
+  focus jumps to the results afterward here too.
 - `Tab` cycles focus between the tree, results table, index panel, and
   query bar.
 - `Esc` in the query bar returns focus to the tree.
