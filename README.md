@@ -62,12 +62,12 @@ across databases.
 ## Layout
 
 - `main.go` — entrypoint, wires config → UI together.
-- `internal/config` — CLI flag / env var resolution and password prompting.
-- `internal/db` — the live Postgres connection (via `pgx`): connecting,
+- `config` — CLI flag / env var resolution and password prompting.
+- `db` — the live Postgres connection (via `pgx`): connecting,
   switching databases, listing catalogs, running queries.
-- `internal/browser` — feature/orchestration layer between `db` and `ui`,
+- `browser` — feature/orchestration layer between `db` and `ui`,
   built against a small `DB` interface so it's unit-testable with a fake.
-- `internal/ui` — the `tview` terminal UI, built against `browser.Browser`.
+- `ui` — the `tview` terminal UI, built against `browser.Browser`.
 
 ## Testing
 
@@ -77,7 +77,7 @@ go test ./...
 
 Unit tests cover the pure utilities (`config.Load`, `db.WithDatabase`,
 `db.FormatValue`, `browser.QuoteIdent`/`TableQuery`/`PreviewQuery`/
-`CountQuery`/`ColumnsQuery`). `internal/db`'s actual Postgres-facing
+`CountQuery`/`ColumnsQuery`). `db`'s actual Postgres-facing
 methods (`ListDatabases`/`ListSchemas`/`ListTables`/`ListIndexes`/
 `RunQuery`/`Connect`/`SwitchDatabase`) are tested against a mocked `pgx`
 connection — SQL/args assertions and row data via
@@ -89,7 +89,7 @@ package tests exercise the tree/table/options-modal/query-bar wiring
 end-to-end against the same kind of fake, without needing a live database
 or terminal.
 
-`internal/ui` also has an opt-in visual smoke test
+`ui` also has an opt-in visual smoke test
 (`TestVisualSmoke`, skipped by default) that drives the real app against
 an actual Postgres and renders it to a simulated terminal screen — the
 only way to catch pure-rendering bugs (glyph-width issues throwing off
@@ -100,5 +100,5 @@ explicitly:
 ```sh
 PGTUI_SMOKE_DSN="postgres://user:pass@localhost:5432/somedb?sslmode=disable" \
 PGTUI_SMOKE_DB="somedb" \
-go test ./internal/ui/... -run TestVisualSmoke -v
+go test ./ui/... -run TestVisualSmoke -v
 ```

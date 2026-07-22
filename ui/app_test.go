@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cfindlayisme/pgtui/internal/browser"
-	"github.com/cfindlayisme/pgtui/internal/db"
+	"github.com/cfindlayisme/pgtui/browser"
+	"github.com/cfindlayisme/pgtui/db"
 )
 
 // fakeDB is the same tiny in-memory Postgres stand-in used by the browser

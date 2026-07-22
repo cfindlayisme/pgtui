@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cfindlayisme/pgtui/internal/db"
+	"github.com/cfindlayisme/pgtui/db"
 )
 
 // DB is the subset of *db.Conn the browser depends on, so tests can

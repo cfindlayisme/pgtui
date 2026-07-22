@@ -1,7 +1,7 @@
 // Package ui is the tview presentation layer: a database/schema/table
 // tree on the left (with an index panel underneath), a results table on
 // the right, and an always-visible query bar at the bottom. All Postgres
-// decisions are delegated to internal/browser; this package only renders
+// decisions are delegated to browser; this package only renders
 // and wires up input.
 package ui
 
@@ -13,8 +13,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/cfindlayisme/pgtui/internal/browser"
-	"github.com/cfindlayisme/pgtui/internal/db"
+	"github.com/cfindlayisme/pgtui/browser"
+	"github.com/cfindlayisme/pgtui/db"
 )
 
 type nodeKind int

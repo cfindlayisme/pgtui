@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cfindlayisme/pgtui/internal/config"
-	"github.com/cfindlayisme/pgtui/internal/ui"
+	"github.com/cfindlayisme/pgtui/config"
+	"github.com/cfindlayisme/pgtui/ui"
 )
 
 func main() {
