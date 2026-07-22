@@ -46,3 +46,15 @@ func TestSetLocaleUnsupportedFallsBackToEnglish(t *testing.T) {
 		t.Errorf("after SetLocale(zz), T() = %q, want %q", got, want)
 	}
 }
+
+func TestRegisterMakesANewLocaleSelectable(t *testing.T) {
+	t.Cleanup(func() { SetLocale("en") })
+
+	Register("xx", map[string]string{"ui.tree_root": "Fake"})
+	SetLocale("xx")
+
+	got := T("ui.tree_root")
+	if got != "Fake" {
+		t.Errorf("T(ui.tree_root) after Register+SetLocale(xx) = %q, want %q", got, "Fake")
+	}
+}

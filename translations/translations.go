@@ -1,7 +1,7 @@
 // Package translations holds the message catalogs for pgtui's UI text.
 // English is built in and always available; additional languages are
-// added by writing a new catalog file (see en.go) and registering it in
-// catalogs below.
+// added by writing a new catalog file (see en.go) and calling Register
+// from that file's init.
 package translations
 
 import "fmt"
@@ -11,6 +11,13 @@ var catalogs = map[string]map[string]string{
 }
 
 var active = catalogs["en"]
+
+// Register adds or replaces a locale catalog, making it selectable via
+// SetLocale. A new language file registers itself from an init() func
+// (see en.go) rather than editing this file by hand.
+func Register(lang string, catalog map[string]string) {
+	catalogs[lang] = catalog
+}
 
 // SetLocale switches the active locale. Falls back to English if the
 // requested locale is not available.
