@@ -7,7 +7,7 @@ results on the right, and an always-visible query bar at the bottom.
 ## Build
 
 ```sh
-go build -o pgtui ./cmd/pgtui
+go build .
 ```
 
 ## Connecting
@@ -51,7 +51,7 @@ across databases.
 
 ## Layout
 
-- `cmd/pgtui` — entrypoint, wires config → UI together.
+- `main.go` — entrypoint, wires config → UI together.
 - `internal/config` — CLI flag / env var resolution and password prompting.
 - `internal/db` — the live Postgres connection (via `pgx`): connecting,
   switching databases, listing catalogs, running queries.
