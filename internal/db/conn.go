@@ -86,6 +86,33 @@ func (c *Conn) ListTables(ctx context.Context, schema string) ([]string, error) 
 		 WHERE table_schema = $1 ORDER BY table_name`, schema)
 }
 
+// IndexInfo describes one index on a table.
+type IndexInfo struct {
+	Name       string
+	Definition string
+}
+
+func (c *Conn) ListIndexes(ctx context.Context, schema, table string) ([]IndexInfo, error) {
+	rows, err := c.conn.Query(ctx,
+		`SELECT indexname, indexdef FROM pg_indexes
+		 WHERE schemaname = $1 AND tablename = $2 ORDER BY indexname`,
+		schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []IndexInfo
+	for rows.Next() {
+		var idx IndexInfo
+		if err := rows.Scan(&idx.Name, &idx.Definition); err != nil {
+			return nil, err
+		}
+		out = append(out, idx)
+	}
+	return out, rows.Err()
+}
+
 func queryStrings(ctx context.Context, conn pgxConn, sql string, args ...any) ([]string, error) {
 	rows, err := conn.Query(ctx, sql, args...)
 	if err != nil {

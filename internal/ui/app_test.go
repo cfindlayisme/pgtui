@@ -22,9 +22,11 @@ type fakeDB struct {
 	databases []string
 	schemas   map[string][]string
 	tables    map[string]map[string][]string
+	indexes   map[string]map[string]map[string][]db.IndexInfo
 	results   map[string]*db.QueryResult
 
-	queryErr error
+	queryErr   error
+	indexesErr error
 }
 
 func (f *fakeDB) ListDatabases(ctx context.Context) ([]string, error) { return f.databases, nil }
@@ -33,6 +35,12 @@ func (f *fakeDB) ListSchemas(ctx context.Context) ([]string, error) {
 }
 func (f *fakeDB) ListTables(ctx context.Context, schema string) ([]string, error) {
 	return f.tables[f.currentDB][schema], nil
+}
+func (f *fakeDB) ListIndexes(ctx context.Context, schema, table string) ([]db.IndexInfo, error) {
+	if f.indexesErr != nil {
+		return nil, f.indexesErr
+	}
+	return f.indexes[f.currentDB][schema][table], nil
 }
 func (f *fakeDB) RunQuery(ctx context.Context, sql string) (*db.QueryResult, error) {
 	if f.queryErr != nil {
@@ -53,6 +61,16 @@ func newTestApp(t *testing.T, fake *fakeDB) *App {
 	return a
 }
 
+// expandToTable drives the tree down to a single table node: expand the
+// (only) database, then its (only) schema, returning the table node.
+func expandToTable(a *App) *tview.TreeNode {
+	dbNode := a.tree.GetRoot().GetChildren()[0]
+	a.onTreeSelect(dbNode)
+	schemaNode := dbNode.GetChildren()[0]
+	a.onTreeSelect(schemaNode)
+	return schemaNode.GetChildren()[0]
+}
+
 func TestNewApp_PopulatesDatabaseNodesFromBrowser(t *testing.T) {
 	fake := &fakeDB{databases: []string{"alpha", "beta"}}
 
@@ -60,8 +78,8 @@ func TestNewApp_PopulatesDatabaseNodesFromBrowser(t *testing.T) {
 
 	children := a.tree.GetRoot().GetChildren()
 	require.Len(t, children, 2)
-	assert.Equal(t, "alpha", children[0].GetText())
-	assert.Equal(t, "beta", children[1].GetText())
+	assert.Equal(t, databaseIcon+" alpha", children[0].GetText())
+	assert.Equal(t, databaseIcon+" beta", children[1].GetText())
 }
 
 func TestOnTreeSelect_DatabaseNodeLoadsSchemasOnce(t *testing.T) {
@@ -76,8 +94,8 @@ func TestOnTreeSelect_DatabaseNodeLoadsSchemasOnce(t *testing.T) {
 
 	schemaNodes := dbNode.GetChildren()
 	require.Len(t, schemaNodes, 2)
-	assert.Equal(t, "public", schemaNodes[0].GetText())
-	assert.Equal(t, "app", schemaNodes[1].GetText())
+	assert.Equal(t, schemaIcon+" public", schemaNodes[0].GetText())
+	assert.Equal(t, schemaIcon+" app", schemaNodes[1].GetText())
 	assert.True(t, dbNode.IsExpanded())
 
 	// Selecting again should just toggle expansion, not reload/duplicate children.
@@ -86,7 +104,64 @@ func TestOnTreeSelect_DatabaseNodeLoadsSchemasOnce(t *testing.T) {
 	assert.Len(t, dbNode.GetChildren(), 2)
 }
 
-func TestOnTreeSelect_TableNodeRunsDefaultQueryAndFillsResults(t *testing.T) {
+func TestOnTreeSelect_TableNodeOpensOptionsAndLoadsIndexes(t *testing.T) {
+	fake := &fakeDB{
+		databases: []string{"alpha"},
+		schemas:   map[string][]string{"alpha": {"public"}},
+		tables:    map[string]map[string][]string{"alpha": {"public": {"users"}}},
+		indexes: map[string]map[string]map[string][]db.IndexInfo{
+			"alpha": {"public": {"users": {
+				{Name: "users_pkey", Definition: "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"},
+			}}},
+		},
+	}
+	a := newTestApp(t, fake)
+	tableNode := expandToTable(a)
+	require.Equal(t, tableIcon+" users", tableNode.GetText())
+
+	a.onTreeSelect(tableNode)
+
+	assert.True(t, a.optionsOpen, "selecting a table should open the query-options prompt")
+	assert.Equal(t, " public.users ", a.optionsList.GetTitle())
+	assert.Equal(t, 5, a.optionsList.GetItemCount(), "preview 100/1000, count, columns, cancel")
+	assert.Contains(t, a.indexPanel.GetText(true), "users_pkey")
+	assert.Contains(t, a.indexPanel.GetText(true), "CREATE UNIQUE INDEX")
+
+	// Nothing should have been queried yet -- that only happens once an
+	// option is picked.
+	assert.Empty(t, a.queryBar.GetText())
+}
+
+func TestOnTreeSelect_TableNodeWithNoIndexes(t *testing.T) {
+	fake := &fakeDB{
+		databases: []string{"alpha"},
+		schemas:   map[string][]string{"alpha": {"public"}},
+		tables:    map[string]map[string][]string{"alpha": {"public": {"users"}}},
+	}
+	a := newTestApp(t, fake)
+	tableNode := expandToTable(a)
+
+	a.onTreeSelect(tableNode)
+
+	assert.Contains(t, a.indexPanel.GetText(true), "no indexes")
+}
+
+func TestOnTreeSelect_IndexLoadErrorShowsInIndexPanel(t *testing.T) {
+	fake := &fakeDB{
+		databases:  []string{"alpha"},
+		schemas:    map[string][]string{"alpha": {"public"}},
+		tables:     map[string]map[string][]string{"alpha": {"public": {"users"}}},
+		indexesErr: errors.New("permission denied"),
+	}
+	a := newTestApp(t, fake)
+	tableNode := expandToTable(a)
+
+	a.onTreeSelect(tableNode)
+
+	assert.Contains(t, a.indexPanel.GetText(true), "permission denied")
+}
+
+func TestTableOptions_Preview100RowsRunsDefaultQuery(t *testing.T) {
 	want := &db.QueryResult{
 		Columns: []string{"id", "name"},
 		Rows:    [][]string{{"1", "bob"}, {"2", "alice"}},
@@ -98,15 +173,12 @@ func TestOnTreeSelect_TableNodeRunsDefaultQueryAndFillsResults(t *testing.T) {
 		results:   map[string]*db.QueryResult{`SELECT * FROM "public"."users" LIMIT 100`: want},
 	}
 	a := newTestApp(t, fake)
-	dbNode := a.tree.GetRoot().GetChildren()[0]
-	a.onTreeSelect(dbNode) // expand -> loads schema
+	tableNode := expandToTable(a)
+	a.onTreeSelect(tableNode)
 
-	schemaNode := dbNode.GetChildren()[0]
-	a.onTreeSelect(schemaNode) // expand -> loads table
+	a.optionsList.GetItemSelectedFunc(0)() // "Preview 100 rows"
 
-	tableNode := schemaNode.GetChildren()[0]
-	a.onTreeSelect(tableNode) // run default query
-
+	assert.False(t, a.optionsOpen, "picking an option should close the prompt")
 	assert.Equal(t, `SELECT * FROM "public"."users" LIMIT 100`, a.queryBar.GetText())
 	assert.Equal(t, " Results (2 rows) ", a.table.GetTitle())
 	assert.Equal(t, "id", a.table.GetCell(0, 0).Text)
@@ -114,7 +186,77 @@ func TestOnTreeSelect_TableNodeRunsDefaultQueryAndFillsResults(t *testing.T) {
 	assert.Equal(t, "alice", a.table.GetCell(2, 1).Text)
 }
 
-func TestOnTreeSelect_QueryErrorShowsInResultsPane(t *testing.T) {
+func TestTableOptions_Preview1000Rows(t *testing.T) {
+	want := &db.QueryResult{Columns: []string{"id"}, Rows: [][]string{{"1"}}}
+	fake := &fakeDB{
+		databases: []string{"alpha"},
+		schemas:   map[string][]string{"alpha": {"public"}},
+		tables:    map[string]map[string][]string{"alpha": {"public": {"users"}}},
+		results:   map[string]*db.QueryResult{`SELECT * FROM "public"."users" LIMIT 1000`: want},
+	}
+	a := newTestApp(t, fake)
+	tableNode := expandToTable(a)
+	a.onTreeSelect(tableNode)
+
+	a.optionsList.GetItemSelectedFunc(1)() // "Preview 1000 rows"
+
+	assert.Equal(t, `SELECT * FROM "public"."users" LIMIT 1000`, a.queryBar.GetText())
+}
+
+func TestTableOptions_RowCount(t *testing.T) {
+	want := &db.QueryResult{Columns: []string{"count"}, Rows: [][]string{{"42"}}}
+	fake := &fakeDB{
+		databases: []string{"alpha"},
+		schemas:   map[string][]string{"alpha": {"public"}},
+		tables:    map[string]map[string][]string{"alpha": {"public": {"users"}}},
+		results:   map[string]*db.QueryResult{`SELECT COUNT(*) FROM "public"."users"`: want},
+	}
+	a := newTestApp(t, fake)
+	tableNode := expandToTable(a)
+	a.onTreeSelect(tableNode)
+
+	a.optionsList.GetItemSelectedFunc(2)() // "Row count"
+
+	assert.Equal(t, `SELECT COUNT(*) FROM "public"."users"`, a.queryBar.GetText())
+	assert.Equal(t, "42", a.table.GetCell(1, 0).Text)
+}
+
+func TestTableOptions_Columns(t *testing.T) {
+	want := &db.QueryResult{Columns: []string{"column_name"}, Rows: [][]string{{"id"}}}
+	query := browser.ColumnsQuery("public", "users")
+	fake := &fakeDB{
+		databases: []string{"alpha"},
+		schemas:   map[string][]string{"alpha": {"public"}},
+		tables:    map[string]map[string][]string{"alpha": {"public": {"users"}}},
+		results:   map[string]*db.QueryResult{query: want},
+	}
+	a := newTestApp(t, fake)
+	tableNode := expandToTable(a)
+	a.onTreeSelect(tableNode)
+
+	a.optionsList.GetItemSelectedFunc(3)() // "Columns"
+
+	assert.Equal(t, query, a.queryBar.GetText())
+	assert.Equal(t, "id", a.table.GetCell(1, 0).Text)
+}
+
+func TestTableOptions_CancelClosesPromptWithoutQuerying(t *testing.T) {
+	fake := &fakeDB{
+		databases: []string{"alpha"},
+		schemas:   map[string][]string{"alpha": {"public"}},
+		tables:    map[string]map[string][]string{"alpha": {"public": {"users"}}},
+	}
+	a := newTestApp(t, fake)
+	tableNode := expandToTable(a)
+	a.onTreeSelect(tableNode)
+
+	a.optionsList.GetItemSelectedFunc(4)() // "Cancel"
+
+	assert.False(t, a.optionsOpen)
+	assert.Empty(t, a.queryBar.GetText())
+}
+
+func TestTableOptions_QueryErrorShowsInResultsPane(t *testing.T) {
 	fake := &fakeDB{
 		databases: []string{"alpha"},
 		schemas:   map[string][]string{"alpha": {"public"}},
@@ -122,13 +264,10 @@ func TestOnTreeSelect_QueryErrorShowsInResultsPane(t *testing.T) {
 		queryErr:  errors.New("permission denied"),
 	}
 	a := newTestApp(t, fake)
-	dbNode := a.tree.GetRoot().GetChildren()[0]
-	a.onTreeSelect(dbNode)
-	schemaNode := dbNode.GetChildren()[0]
-	a.onTreeSelect(schemaNode)
-	tableNode := schemaNode.GetChildren()[0]
-
+	tableNode := expandToTable(a)
 	a.onTreeSelect(tableNode)
+
+	a.optionsList.GetItemSelectedFunc(0)()
 
 	assert.Contains(t, a.table.GetCell(0, 0).Text, "permission denied")
 }

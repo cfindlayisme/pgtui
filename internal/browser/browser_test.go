@@ -17,9 +17,10 @@ type fakeDB struct {
 	currentDB string
 
 	databases []string
-	schemas   map[string][]string            // dbname -> schemas
-	tables    map[string]map[string][]string // dbname -> schema -> tables
-	results   map[string]*db.QueryResult     // sql -> result
+	schemas   map[string][]string                             // dbname -> schemas
+	tables    map[string]map[string][]string                  // dbname -> schema -> tables
+	indexes   map[string]map[string]map[string][]db.IndexInfo // dbname -> schema -> table -> indexes
+	results   map[string]*db.QueryResult                      // sql -> result
 
 	switchErr error
 	queryErr  error
@@ -38,6 +39,10 @@ func (f *fakeDB) ListSchemas(ctx context.Context) ([]string, error) {
 
 func (f *fakeDB) ListTables(ctx context.Context, schema string) ([]string, error) {
 	return f.tables[f.currentDB][schema], nil
+}
+
+func (f *fakeDB) ListIndexes(ctx context.Context, schema, table string) ([]db.IndexInfo, error) {
+	return f.indexes[f.currentDB][schema][table], nil
 }
 
 func (f *fakeDB) RunQuery(ctx context.Context, sql string) (*db.QueryResult, error) {
@@ -106,6 +111,31 @@ func TestBrowser_Tables_SwitchesDatabaseFirst(t *testing.T) {
 	assert.Equal(t, []string{"alpha"}, fake.switchCalls)
 }
 
+func TestBrowser_Indexes_SwitchesDatabaseFirst(t *testing.T) {
+	want := []db.IndexInfo{{Name: "users_pkey", Definition: "CREATE UNIQUE INDEX ..."}}
+	fake := &fakeDB{
+		indexes: map[string]map[string]map[string][]db.IndexInfo{
+			"alpha": {"public": {"users": want}},
+		},
+	}
+	b := New(fake)
+
+	got, err := b.Indexes(context.Background(), "alpha", "public", "users")
+
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+	assert.Equal(t, []string{"alpha"}, fake.switchCalls)
+}
+
+func TestBrowser_Indexes_PropagatesSwitchError(t *testing.T) {
+	fake := &fakeDB{switchErr: errors.New("connection refused")}
+	b := New(fake)
+
+	_, err := b.Indexes(context.Background(), "alpha", "public", "users")
+
+	assert.EqualError(t, err, "connection refused")
+}
+
 func TestBrowser_RunQuery_SwitchesDatabaseFirst(t *testing.T) {
 	want := &db.QueryResult{Columns: []string{"id"}, Rows: [][]string{{"1"}}}
 	fake := &fakeDB{
@@ -157,4 +187,30 @@ func TestTableQuery(t *testing.T) {
 func TestTableQuery_EscapesIdentifiers(t *testing.T) {
 	got := TableQuery(`sch"ema`, "table")
 	assert.Equal(t, `SELECT * FROM "sch""ema"."table" LIMIT 100`, got)
+}
+
+func TestPreviewQuery(t *testing.T) {
+	got := PreviewQuery("public", "users", 1000)
+	assert.Equal(t, `SELECT * FROM "public"."users" LIMIT 1000`, got)
+}
+
+func TestTableQuery_MatchesPreviewQueryAt100(t *testing.T) {
+	assert.Equal(t, PreviewQuery("public", "users", 100), TableQuery("public", "users"))
+}
+
+func TestCountQuery(t *testing.T) {
+	got := CountQuery("public", "users")
+	assert.Equal(t, `SELECT COUNT(*) FROM "public"."users"`, got)
+}
+
+func TestColumnsQuery(t *testing.T) {
+	got := ColumnsQuery("public", "users")
+	assert.Contains(t, got, "FROM information_schema.columns")
+	assert.Contains(t, got, "WHERE table_schema = 'public' AND table_name = 'users'")
+	assert.Contains(t, got, "ORDER BY ordinal_position")
+}
+
+func TestColumnsQuery_EscapesLiterals(t *testing.T) {
+	got := ColumnsQuery(`sch'ema`, "table")
+	assert.Contains(t, got, `table_schema = 'sch''ema'`)
 }

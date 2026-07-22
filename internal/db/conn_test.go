@@ -72,6 +72,50 @@ func TestConn_ListTables_PassesSchemaAsArg(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestConn_ListIndexes_PassesSchemaAndTableAsArgs(t *testing.T) {
+	mock := newMockConn(t)
+	mock.ExpectQuery(`SELECT indexname, indexdef FROM pg_indexes`).
+		WithArgs("public", "users").
+		WillReturnRows(pgxmock.NewRows([]string{"indexname", "indexdef"}).
+			AddRow("users_pkey", "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)").
+			AddRow("users_email_idx", "CREATE INDEX users_email_idx ON public.users USING btree (email)"))
+
+	c := &Conn{conn: mock}
+	got, err := c.ListIndexes(context.Background(), "public", "users")
+
+	require.NoError(t, err)
+	assert.Equal(t, []IndexInfo{
+		{Name: "users_pkey", Definition: "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"},
+		{Name: "users_email_idx", Definition: "CREATE INDEX users_email_idx ON public.users USING btree (email)"},
+	}, got)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestConn_ListIndexes_NoIndexes(t *testing.T) {
+	mock := newMockConn(t)
+	mock.ExpectQuery(`SELECT indexname, indexdef FROM pg_indexes`).
+		WithArgs("public", "unindexed").
+		WillReturnRows(pgxmock.NewRows([]string{"indexname", "indexdef"}))
+
+	c := &Conn{conn: mock}
+	got, err := c.ListIndexes(context.Background(), "public", "unindexed")
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestConn_ListIndexes_PropagatesQueryError(t *testing.T) {
+	mock := newMockConn(t)
+	mock.ExpectQuery(`SELECT indexname, indexdef FROM pg_indexes`).
+		WithArgs("public", "users").
+		WillReturnError(errors.New("permission denied"))
+
+	c := &Conn{conn: mock}
+	_, err := c.ListIndexes(context.Background(), "public", "users")
+
+	assert.EqualError(t, err, "permission denied")
+}
+
 func TestConn_RunQuery_BuildsColumnsAndRows(t *testing.T) {
 	mock := newMockConn(t)
 	mock.ExpectQuery(`SELECT id, name FROM users`).

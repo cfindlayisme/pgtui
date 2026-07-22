@@ -35,13 +35,21 @@ PGHOST=localhost PGPORT=5432 PGUSER=postgres PGDATABASE=postgres ./pgtui
 
 ## Using it
 
-- Left panel: tree of databases → schemas → tables. `Enter` on a database
-  or schema loads and expands its children; `Enter` on a table runs a
-  default `SELECT * ... LIMIT 100` and shows the results on the right.
+- Top-left panel: tree of databases → schemas → tables, tagged `DB:` /
+  `SCHEMA:` / `TABLE:` (each also its own color) so the hierarchy is
+  unambiguous at a glance. `Enter` on a database or schema loads and
+  expands its children.
+- Bottom-left panel: indexes on whichever table you last selected (name +
+  full definition, via `pg_indexes`).
+- `Enter` on a table pops up a menu of common queries instead of guessing
+  which one you want: preview 100 rows, preview 1000 rows, row count, or
+  column list (name/type/nullable/default). Pick one with `1`-`4`/arrows+
+  `Enter`, or `Esc`/`Cancel` to back out without running anything.
 - Right panel: results of the last query.
 - Bottom bar: always shows the query that produced the current results.
   Press `:` to focus it, type any SQL, and press `Enter` to run it.
-- `Tab` cycles focus between the tree, results table, and query bar.
+- `Tab` cycles focus between the tree, results table, index panel, and
+  query bar.
 - `Esc` in the query bar returns focus to the tree.
 - `q` or `Ctrl+C` quits.
 
@@ -66,13 +74,29 @@ go test ./...
 ```
 
 Unit tests cover the pure utilities (`config.Load`, `db.WithDatabase`,
-`db.FormatValue`, `browser.QuoteIdent`/`TableQuery`). `internal/db`'s
-actual Postgres-facing methods (`ListDatabases`/`ListSchemas`/
-`ListTables`/`RunQuery`/`Connect`/`SwitchDatabase`) are tested against a
-mocked `pgx` connection — SQL/args assertions and row data via
+`db.FormatValue`, `browser.QuoteIdent`/`TableQuery`/`PreviewQuery`/
+`CountQuery`/`ColumnsQuery`). `internal/db`'s actual Postgres-facing
+methods (`ListDatabases`/`ListSchemas`/`ListTables`/`ListIndexes`/
+`RunQuery`/`Connect`/`SwitchDatabase`) are tested against a mocked `pgx`
+connection — SQL/args assertions and row data via
 [`pgxmock`](https://github.com/pashagolub/pgxmock) for query building, and
 a small hand-rolled fake for the connect/reconnect/close lifecycle — so
 none of it needs a live database. Functional tests cover
 `browser.Browser`'s orchestration against a fake `DB`; and the `ui`
-package tests exercise the tree/table/query-bar wiring end-to-end against
-the same kind of fake, without needing a live database or terminal.
+package tests exercise the tree/table/options-modal/query-bar wiring
+end-to-end against the same kind of fake, without needing a live database
+or terminal.
+
+`internal/ui` also has an opt-in visual smoke test
+(`TestVisualSmoke`, skipped by default) that drives the real app against
+an actual Postgres and renders it to a simulated terminal screen — the
+only way to catch pure-rendering bugs (glyph-width issues throwing off
+tview's cursor math, tree text being misparsed as color tags) that
+logic-level tests can't see. Point it at a scratch database and run it
+explicitly:
+
+```sh
+PGTUI_SMOKE_DSN="postgres://user:pass@localhost:5432/somedb?sslmode=disable" \
+PGTUI_SMOKE_DB="somedb" \
+go test ./internal/ui/... -run TestVisualSmoke -v
+```
