@@ -1,8 +1,33 @@
 # pgtui
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="pgtui screenshot" width="800">
+</p>
+
 A very small terminal UI for browsing Postgres, in the spirit of Midnight
 Commander / pgAdmin: a database → schema → table tree on the left, query
 results on the right, and an always-visible query bar at the bottom.
+
+## Install
+
+**macOS (Homebrew):**
+
+```sh
+brew tap cfindlayisme/tap
+brew install pgtui
+```
+
+**Linux or macOS (prebuilt binary):** grab `pgtui-linux-amd64`,
+`pgtui-linux-arm64`, `pgtui-darwin-amd64`, or `pgtui-darwin-arm64` from the
+[latest release](https://github.com/cfindlayisme/pgtui/releases/latest),
+then:
+
+```sh
+chmod +x pgtui-*
+mv pgtui-* /usr/local/bin/pgtui
+```
+
+**From source:** see [Build](#build) below.
 
 ## Build
 
