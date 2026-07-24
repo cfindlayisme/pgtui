@@ -33,12 +33,34 @@ prompts for it interactively (without echoing) before launching.
 PGHOST=localhost PGPORT=5432 PGUSER=postgres PGDATABASE=postgres ./pgtui
 ```
 
+## Language
+
+UI text defaults to English. Select another installed locale with
+`--lang` or `PGTUI_LANG` (flag wins if both are set):
+
+```sh
+./pgtui --lang fr ...
+# or
+PGTUI_LANG=fr ./pgtui ...
+```
+
+An unrecognized locale silently falls back to English. To add a new one,
+drop a catalog file next to `translations/en.go` and register it from
+that file's `init()` via `translations.Register("fr", fr)` -- see
+`translations/translations.go`.
+
 ## Using it
 
+- Header (top): connection context on the left (host/user/currently
+  active database), a keybinding legend in the middle, and the pgtui
+  wordmark/copyright/repo link on the right -- k9s-inspired, always-black
+  background regardless of the terminal's theme.
 - Top-left panel: tree of databases → schemas → tables, tagged `DB:` /
   `SCHEMA:` / `TABLE:` (each also its own color) so the hierarchy is
   unambiguous at a glance. `Enter` on a database or schema loads and
-  expands its children.
+  expands its children. Just highlighting a database node (arrow keys,
+  no `Enter` needed) reconnects to it immediately, so the header and
+  query bar always reflect whichever database the cursor is on.
 - Bottom-left panel: indexes on whichever table you last selected (name +
   full definition, via `pg_indexes`).
 - `Enter` on a table pops up a menu of common queries instead of guessing
@@ -46,18 +68,20 @@ PGHOST=localhost PGPORT=5432 PGUSER=postgres PGDATABASE=postgres ./pgtui
   column list (name/type/nullable/default). Pick one with `1`-`4`/arrows+
   `Enter` and focus jumps straight to the results; `Esc`/`Cancel` backs
   out to the tree without running anything.
-- Right panel: results of the last query.
+- Right panel: results of the last query, as a grid. Press `w` to toggle
+  a wrapped view instead -- tview's grid can't wrap a cell across lines,
+  so wide/long values (JSON blobs, timestamps) there get truncated with
+  an ellipsis; the wrapped view shows every value in full as one
+  `column: value` block per row. `w` again switches back.
 - Bottom bar: always shows the query that produced the current results.
   Press `:` to focus it, type any SQL, and press `Enter` to run it --
   focus jumps to the results afterward here too.
-- `Tab` cycles focus between the tree, results table, index panel, and
-  query bar.
+- Any panel that has more content than fits shows a `^`/`v` in its title
+  for whether you can scroll up/down from where you are.
+- `Tab` cycles focus forward between the tree, results, index panel, and
+  query bar; `Shift+Tab` cycles the same ring backward.
 - `Esc` in the query bar returns focus to the tree.
 - `q` or `Ctrl+C` quits.
-
-Selecting a database that differs from the currently connected one
-transparently reconnects, since a single Postgres connection can't query
-across databases.
 
 ## Layout
 
@@ -68,6 +92,8 @@ across databases.
 - `browser` — feature/orchestration layer between `db` and `ui`,
   built against a small `DB` interface so it's unit-testable with a fake.
 - `ui` — the `tview` terminal UI, built against `browser.Browser`.
+- `translations` — message catalogs for UI text; English is built in,
+  additional locales register themselves (see Language above).
 
 ## Development database
 

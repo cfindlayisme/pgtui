@@ -46,14 +46,18 @@ func TestVisualSmoke(t *testing.T) {
 	if err := sim.Init(); err != nil {
 		t.Fatal(err)
 	}
-	sim.SetSize(110, 32)
 
 	a, err := NewApp(context.Background(), os.Getenv("PGTUI_SMOKE_DSN"), os.Getenv("PGTUI_SMOKE_DB"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// SetScreen re-initializes the screen internally, which resets a
+	// SimulationScreen back to tcell's 80x25 default -- so the intended
+	// size has to be set after attaching it, not before, or it's silently
+	// discarded and every rect/wrap computation below is measured wrong.
 	a.tv.SetScreen(sim)
+	sim.SetSize(110, 32)
 	a.tv.SetRoot(a.pages, true).SetFocus(a.tree)
 	a.tv.ForceDraw()
 	dumpScreen(t, sim, "initial tree")

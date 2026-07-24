@@ -57,7 +57,7 @@ func (f *fakeDB) Close(ctx context.Context) {}
 
 func newTestApp(t *testing.T, fake *fakeDB) *App {
 	t.Helper()
-	a, err := newAppWithBrowser(context.Background(), browser.New(fake))
+	a, err := newAppWithBrowser(context.Background(), browser.New(fake), "")
 	require.NoError(t, err)
 	return a
 }
