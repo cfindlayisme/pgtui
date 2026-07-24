@@ -321,9 +321,18 @@ func (a *App) refreshScrollIndicators() {
 }
 
 func (a *App) buildQueryBar() {
-	a.queryBar = tview.NewInputField().SetLabel("SQL> ")
+	a.queryBar = tview.NewInputField()
+	a.updateQueryBarLabel()
 	a.queryBar.SetBorder(true).SetTitle(translations.T("ui.query_title"))
 	a.queryBar.SetDoneFunc(a.onQueryBarDone)
+}
+
+// updateQueryBarLabel keeps the query bar's own label naming the
+// database it's about to run against, right where you're typing --
+// belt-and-suspenders alongside the header's Database: line, since
+// that's easy to miss while focused on the query bar itself.
+func (a *App) updateQueryBarLabel() {
+	a.queryBar.SetLabel(translations.T("ui.query_label", a.database))
 }
 
 func (a *App) buildOptionsList() {
@@ -482,13 +491,15 @@ func (a *App) loadDatabases() error {
 }
 
 // onTreeHighlightChanged fires as the highlighted tree node changes --
-// e.g. arrow-key navigation -- rather than only on Enter/click. Database
-// nodes reconnect the live session as soon as they're highlighted, so the
-// query bar and header always reflect whichever database the cursor is
-// currently sitting on, without needing to open it first.
+// e.g. arrow-key navigation -- rather than only on Enter/click. Any node
+// under a database (the database node itself, or an already-expanded
+// schema/table beneath it) reconnects the live session as soon as it's
+// highlighted, so the header and query bar always reflect whichever
+// database the cursor is currently sitting in, without needing to
+// re-open that database's own node first.
 func (a *App) onTreeHighlightChanged(node *tview.TreeNode) {
 	ref, ok := node.GetReference().(*nodeData)
-	if !ok || ref.kind != kindDatabase || ref.dbname == a.database {
+	if !ok || ref.dbname == "" || ref.dbname == a.database {
 		return
 	}
 	if err := a.br.DB.SwitchDatabase(a.ctx, ref.dbname); err != nil {
@@ -497,6 +508,7 @@ func (a *App) onTreeHighlightChanged(node *tview.TreeNode) {
 	}
 	a.database = ref.dbname
 	a.updateHeaderInfo()
+	a.updateQueryBarLabel()
 }
 
 func (a *App) onTreeSelect(node *tview.TreeNode) {
@@ -508,6 +520,7 @@ func (a *App) onTreeSelect(node *tview.TreeNode) {
 	if ref.dbname != "" && ref.dbname != a.database {
 		a.database = ref.dbname
 		a.updateHeaderInfo()
+		a.updateQueryBarLabel()
 	}
 
 	switch ref.kind {

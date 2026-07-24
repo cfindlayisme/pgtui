@@ -11,6 +11,7 @@ var en = map[string]string{
 	"ui.results_title":            " Results ",
 	"ui.results_title_rows":       " Results (%d rows) ",
 	"ui.query_title":              " Query ",
+	"ui.query_label":              "SQL DB: %s> ",
 	"ui.error_prefix":             "Error: ",
 	"ui.option.preview_100":       "Preview 100 rows",
 	"ui.option.preview_100_desc":  "SELECT * ... LIMIT 100",
