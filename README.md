@@ -69,6 +69,25 @@ across databases.
   built against a small `DB` interface so it's unit-testable with a fake.
 - `ui` — the `tview` terminal UI, built against `browser.Browser`.
 
+## Development database
+
+`scripts/dev-postgres.sh` spins up a throwaway Postgres in Docker (two
+databases, a couple of schemas, and enough sample rows/indexes to make the
+tree and results pane worth looking at) so there's something real to point
+pgtui at while developing:
+
+```sh
+scripts/dev-postgres.sh [up|down|reset]   # up is the default
+```
+
+To skip typing out connection flags, `source` the companion script instead
+-- it starts the container if needed, exports `PG*` env vars for the rest
+of the shell session, and launches pgtui:
+
+```sh
+source scripts/dev-env.sh
+```
+
 ## Testing
 
 ```sh
