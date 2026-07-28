@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -18,6 +19,14 @@ import (
 	"github.com/cfindlayisme/pgtui/db"
 	"github.com/cfindlayisme/pgtui/translations"
 )
+
+// highlightSwitchDelay is how long the tree cursor must sit still on a
+// database node before its SwitchDatabase reconnect actually fires. Without
+// this, holding an arrow key down to scroll past several databases fired a
+// live reconnect per node passed over, stalling the UI thread with a
+// network round-trip on every step. The delay is short enough that a
+// single, deliberate move still feels immediate.
+const highlightSwitchDelay = 150 * time.Millisecond
 
 // Forced to pure black rather than left at the terminal's default, in the
 // spirit of k9s's always-black chrome -- keeps the header/border colors
@@ -88,6 +97,12 @@ type App struct {
 	host     string
 	user     string
 	database string
+
+	// highlightGen is bumped on every tree highlight change and captured
+	// by the pending debounce timer (see highlightSwitchDelay); a timer
+	// that fires after being superseded by a newer highlight compares its
+	// captured value against the current one and no-ops if they differ.
+	highlightGen int
 
 	ctx context.Context
 	br  *browser.Browser
@@ -493,22 +508,32 @@ func (a *App) loadDatabases() error {
 // onTreeHighlightChanged fires as the highlighted tree node changes --
 // e.g. arrow-key navigation -- rather than only on Enter/click. Any node
 // under a database (the database node itself, or an already-expanded
-// schema/table beneath it) reconnects the live session as soon as it's
-// highlighted, so the header and query bar always reflect whichever
-// database the cursor is currently sitting in, without needing to
-// re-open that database's own node first.
+// schema/table beneath it) reconnects the live session once the cursor
+// settles on it (see highlightSwitchDelay), so the header and query bar
+// end up reflecting whichever database the cursor is currently sitting
+// in, without needing to re-open that database's own node first.
 func (a *App) onTreeHighlightChanged(node *tview.TreeNode) {
 	ref, ok := node.GetReference().(*nodeData)
 	if !ok || ref.dbname == "" || ref.dbname == a.database {
 		return
 	}
-	if err := a.br.DB.SwitchDatabase(a.ctx, ref.dbname); err != nil {
-		a.showError(err)
-		return
-	}
-	a.database = ref.dbname
-	a.updateHeaderInfo()
-	a.updateQueryBarLabel()
+	a.highlightGen++
+	gen := a.highlightGen
+	dbname := ref.dbname
+	time.AfterFunc(highlightSwitchDelay, func() {
+		a.tv.QueueUpdateDraw(func() {
+			if gen != a.highlightGen {
+				return // superseded by a later highlight change
+			}
+			if err := a.br.DB.SwitchDatabase(a.ctx, dbname); err != nil {
+				a.showError(err)
+				return
+			}
+			a.database = dbname
+			a.updateHeaderInfo()
+			a.updateQueryBarLabel()
+		})
+	})
 }
 
 func (a *App) onTreeSelect(node *tview.TreeNode) {
