@@ -87,6 +87,14 @@ type App struct {
 	optionsOpen bool
 	wrapped     bool
 
+	// lastResult/resultsTextDirty back the lazy rendering of the wrapped
+	// text view (see toggleWrap/renderResultsText): the wrapped text is
+	// only built the first time it's actually viewed after a new result
+	// set arrives, not on every query regardless of whether "w" is ever
+	// pressed.
+	lastResult       *db.QueryResult
+	resultsTextDirty bool
+
 	// Base titles for the panels that get a scroll indicator appended
 	// (see refreshScrollIndicators) -- kept separate from what's actually
 	// on screen so appending "^"/"v" never has to be undone.
@@ -259,7 +267,9 @@ func (a *App) buildTable() {
 // values there always end up truncated with an ellipsis. This renders
 // the same result set as one "column: value" block per row instead,
 // word-wrapped to the pane width, trading the grid layout for not
-// losing any data off the edge of the screen.
+// losing any data off the edge of the screen. It's populated lazily
+// (see toggleWrap) rather than on every query, since most queries are
+// never actually viewed in this form.
 func (a *App) buildResultsText() {
 	a.resultsText = tview.NewTextView().
 		SetDynamicColors(true).
@@ -466,13 +476,19 @@ func (a *App) resultsFocusTarget() tview.Primitive {
 
 // toggleWrap is "w": swap the results pane between the grid table (fast
 // to scan, truncates long values) and the wrapped text view (shows every
-// value in full, one row per block). Both are kept populated with the
-// same data at all times, so switching is instant.
+// value in full, one row per block). The wrapped view is rendered lazily,
+// the first time it's actually switched to after a new result set arrives
+// (see resultsTextDirty), rather than on every query regardless of
+// whether it's ever looked at.
 func (a *App) toggleWrap() {
 	hadResultsFocus := a.tv.GetFocus() == a.table || a.tv.GetFocus() == a.resultsText
 
 	a.wrapped = !a.wrapped
 	if a.wrapped {
+		if a.resultsTextDirty && a.lastResult != nil {
+			a.renderResultsText(a.lastResult)
+			a.resultsTextDirty = false
+		}
 		a.resultsPages.SwitchToPage("text")
 	} else {
 		a.resultsPages.SwitchToPage("table")
@@ -738,7 +754,12 @@ func (a *App) setResults(result *db.QueryResult) {
 	}
 	a.table.ScrollToBeginning()
 
-	a.renderResultsText(result)
+	a.lastResult = result
+	a.resultsTextDirty = true
+	if a.wrapped {
+		a.renderResultsText(result)
+		a.resultsTextDirty = false
+	}
 
 	a.setResultsTitle(translations.T("ui.results_title_rows", len(result.Rows)))
 }
