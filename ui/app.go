@@ -437,31 +437,38 @@ func (a *App) setKeybindings() {
 	})
 }
 
+// focusRing is the order Tab/Shift+Tab cycle through: tree -> results
+// (whichever of table/wrapped-text is currently visible) -> index panel ->
+// query bar -> back to tree. Built fresh on every call since
+// resultsFocusTarget can change between calls.
+func (a *App) focusRing() []tview.Primitive {
+	return []tview.Primitive{a.tree, a.resultsFocusTarget(), a.indexPanel, a.queryBar}
+}
+
 func (a *App) cycleFocus() {
-	switch a.tv.GetFocus() {
-	case a.tree:
-		a.tv.SetFocus(a.resultsFocusTarget())
-	case a.resultsFocusTarget():
-		a.tv.SetFocus(a.indexPanel)
-	case a.indexPanel:
-		a.tv.SetFocus(a.queryBar)
-	default:
-		a.tv.SetFocus(a.tree)
-	}
+	a.cycleFocusBy(1)
 }
 
 // cycleFocusBack is Shift+Tab: the exact reverse of cycleFocus.
 func (a *App) cycleFocusBack() {
-	switch a.tv.GetFocus() {
-	case a.queryBar:
-		a.tv.SetFocus(a.indexPanel)
-	case a.indexPanel:
-		a.tv.SetFocus(a.resultsFocusTarget())
-	case a.resultsFocusTarget():
-		a.tv.SetFocus(a.tree)
-	default:
-		a.tv.SetFocus(a.queryBar)
+	a.cycleFocusBy(-1)
+}
+
+// cycleFocusBy moves focus delta steps around focusRing (wrapping in
+// either direction), landing on the tree if the current focus isn't a
+// member of the ring (e.g. at startup, before anything has been focused).
+func (a *App) cycleFocusBy(delta int) {
+	ring := a.focusRing()
+	cur := a.tv.GetFocus()
+	idx := 0
+	for i, p := range ring {
+		if p == cur {
+			idx = i
+			break
+		}
 	}
+	next := (idx + delta + len(ring)) % len(ring)
+	a.tv.SetFocus(ring[next])
 }
 
 // resultsFocusTarget is whichever of the table/wrapped-text results view
@@ -595,17 +602,27 @@ func (a *App) onTreeSelect(node *tview.TreeNode) {
 	}
 }
 
+// addChildNodes appends one tree child per name in items, tagged with icon
+// and colored with color, referencing a *nodeData built by makeRef. Shared
+// by loadSchemas/loadTables, which differ only in the icon/color used and
+// which nodeData fields the child should carry.
+func addChildNodes(node *tview.TreeNode, items []string, icon string, color tcell.Color, makeRef func(name string) *nodeData) {
+	for _, name := range items {
+		child := tview.NewTreeNode(icon + " " + name).
+			SetReference(makeRef(name)).
+			SetColor(color)
+		node.AddChild(child)
+	}
+}
+
 func (a *App) loadSchemas(node *tview.TreeNode, ref *nodeData) error {
 	schemas, err := a.br.Schemas(a.ctx, ref.dbname)
 	if err != nil {
 		return err
 	}
-	for _, s := range schemas {
-		child := tview.NewTreeNode(schemaIcon + " " + s).
-			SetReference(&nodeData{kind: kindSchema, dbname: ref.dbname, schema: s}).
-			SetColor(tcell.ColorGreen)
-		node.AddChild(child)
-	}
+	addChildNodes(node, schemas, schemaIcon, tcell.ColorGreen, func(s string) *nodeData {
+		return &nodeData{kind: kindSchema, dbname: ref.dbname, schema: s}
+	})
 	ref.loaded = true
 	return nil
 }
@@ -615,12 +632,9 @@ func (a *App) loadTables(node *tview.TreeNode, ref *nodeData) error {
 	if err != nil {
 		return err
 	}
-	for _, t := range tables {
-		child := tview.NewTreeNode(tableIcon + " " + t).
-			SetReference(&nodeData{kind: kindTable, dbname: ref.dbname, schema: ref.schema, table: t}).
-			SetColor(tcell.ColorAqua)
-		node.AddChild(child)
-	}
+	addChildNodes(node, tables, tableIcon, tcell.ColorAqua, func(t string) *nodeData {
+		return &nodeData{kind: kindTable, dbname: ref.dbname, schema: ref.schema, table: t}
+	})
 	ref.loaded = true
 	return nil
 }
