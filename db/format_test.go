@@ -18,6 +18,10 @@ func TestFormatValue(t *testing.T) {
 		{"float", 3.5, "3.5"},
 		{"bool true", true, "true"},
 		{"bool false", false, "false"},
+		{"int32", int32(7), "7"},
+		{"int64", int64(9000000000), "9000000000"},
+		{"float32", float32(1.25), "1.25"},
+		{"bytes", []byte("raw"), "raw"},
 	}
 
 	for _, tc := range cases {
