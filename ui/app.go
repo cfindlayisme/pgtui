@@ -761,7 +761,11 @@ func (a *App) setResults(result *db.QueryResult) {
 		a.resultsTextDirty = false
 	}
 
-	a.setResultsTitle(translations.T("ui.results_title_rows", len(result.Rows)))
+	if result.Truncated {
+		a.setResultsTitle(translations.T("ui.results_title_truncated", len(result.Rows)))
+	} else {
+		a.setResultsTitle(translations.T("ui.results_title_rows", len(result.Rows)))
+	}
 }
 
 // renderResultsText fills in the wrapped-text alternative to the results

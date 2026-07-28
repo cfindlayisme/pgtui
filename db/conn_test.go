@@ -144,6 +144,22 @@ func TestConn_RunQuery_NoRows(t *testing.T) {
 	assert.Empty(t, got.Rows)
 }
 
+func TestConn_RunQuery_TruncatesAtMaxResultRows(t *testing.T) {
+	mock := newMockConn(t)
+	rows := pgxmock.NewRows([]string{"n"})
+	for i := 0; i < MaxResultRows+5; i++ {
+		rows.AddRow(int32(i))
+	}
+	mock.ExpectQuery(`SELECT n FROM big`).WillReturnRows(rows)
+
+	c := &Conn{conn: mock}
+	got, err := c.RunQuery(context.Background(), "SELECT n FROM big")
+
+	require.NoError(t, err)
+	assert.True(t, got.Truncated)
+	assert.Len(t, got.Rows, MaxResultRows)
+}
+
 func TestConn_RunQuery_PropagatesQueryError(t *testing.T) {
 	mock := newMockConn(t)
 	mock.ExpectQuery(`SELECT \* FROM nope`).

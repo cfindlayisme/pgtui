@@ -131,10 +131,21 @@ func queryStrings(ctx context.Context, conn pgxConn, sql string, args ...any) ([
 	return out, rows.Err()
 }
 
-// QueryResult is a flattened, display-ready result set.
+// MaxResultRows caps how many rows RunQuery will materialize for a single
+// query. The table-preview queries the tree builds (browser.PreviewQuery)
+// already carry their own SQL LIMIT, but anything typed into the free-form
+// query bar has none -- without a cap here, a "SELECT * FROM huge_table"
+// would load the entire table into memory, defeating the whole point of a
+// tool built to be lightweight on a RAM-constrained machine.
+const MaxResultRows = 10000
+
+// QueryResult is a flattened, display-ready result set. Truncated is set
+// when the query had more than MaxResultRows rows and only the first
+// MaxResultRows were kept.
 type QueryResult struct {
-	Columns []string
-	Rows    [][]string
+	Columns   []string
+	Rows      [][]string
+	Truncated bool
 }
 
 func (c *Conn) RunQuery(ctx context.Context, sql string) (*QueryResult, error) {
@@ -151,7 +162,12 @@ func (c *Conn) RunQuery(ctx context.Context, sql string) (*QueryResult, error) {
 	}
 
 	var result [][]string
+	truncated := false
 	for rows.Next() {
+		if len(result) >= MaxResultRows {
+			truncated = true
+			break
+		}
 		vals, err := rows.Values()
 		if err != nil {
 			return nil, err
@@ -162,8 +178,12 @@ func (c *Conn) RunQuery(ctx context.Context, sql string) (*QueryResult, error) {
 		}
 		result = append(result, row)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	// Skipped once truncated: rows.Err() only reports errors from rows
+	// actually iterated, and breaking out early on purpose isn't one.
+	if !truncated {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
-	return &QueryResult{Columns: cols, Rows: result}, nil
+	return &QueryResult{Columns: cols, Rows: result, Truncated: truncated}, nil
 }
