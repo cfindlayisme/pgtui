@@ -10,6 +10,7 @@ var en = map[string]string{
 	"ui.no_indexes":               "no indexes",
 	"ui.results_title":            " Results ",
 	"ui.results_title_rows":       " Results (%d rows) ",
+	"ui.results_title_truncated":  " Results (%d rows, truncated) ",
 	"ui.query_title":              " Query ",
 	"ui.query_label":              "SQL DB: %s> ",
 	"ui.error_prefix":             "Error: ",

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -18,6 +19,11 @@ import (
 	"github.com/cfindlayisme/pgtui/db"
 	"github.com/cfindlayisme/pgtui/translations"
 )
+
+// highlightSwitchDelay debounces onTreeHighlightChanged's reconnect: without
+// it, holding an arrow key down to scroll past several databases fired a
+// live SwitchDatabase per node passed over.
+const highlightSwitchDelay = 150 * time.Millisecond
 
 // Forced to pure black rather than left at the terminal's default, in the
 // spirit of k9s's always-black chrome -- keeps the header/border colors
@@ -78,6 +84,14 @@ type App struct {
 	optionsOpen bool
 	wrapped     bool
 
+	// lastResult/resultsTextDirty back the lazy rendering of the wrapped
+	// text view (see toggleWrap/renderResultsText): the wrapped text is
+	// only built the first time it's actually viewed after a new result
+	// set arrives, not on every query regardless of whether "w" is ever
+	// pressed.
+	lastResult       *db.QueryResult
+	resultsTextDirty bool
+
 	// Base titles for the panels that get a scroll indicator appended
 	// (see refreshScrollIndicators) -- kept separate from what's actually
 	// on screen so appending "^"/"v" never has to be undone.
@@ -88,6 +102,12 @@ type App struct {
 	host     string
 	user     string
 	database string
+
+	// highlightGen is bumped on every tree highlight change and captured
+	// by the pending debounce timer (see highlightSwitchDelay); a timer
+	// that fires after being superseded by a newer highlight compares its
+	// captured value against the current one and no-ops if they differ.
+	highlightGen int
 
 	ctx context.Context
 	br  *browser.Browser
@@ -154,20 +174,15 @@ func newAppWithBrowser(ctx context.Context, br *browser.Browser, database string
 	return a, nil
 }
 
-// pgtuiLogo is a block-letter ASCII wordmark, k9s-style, shown in the
-// header's top-right corner. Plain "#"/space blocks rather than k9s's
-// slashes -- easier to keep pixel-aligned across five straight-stroke
-// letters, and still ASCII-only per the width-safety rule above.
+// pgtuiLogo is a block-letter ASCII wordmark shown top-right in the header.
+// Plain "#"/space blocks, not k9s's slashes -- easier to keep pixel-aligned,
+// and still ASCII-only per the width-safety note above.
 const pgtuiLogo = `####   ###  ##### #   # #####
 #   # #       #   #   #   #
 ####  #  ##   #   #   #   #
 #     #   #   #   #   #   #
 #      ###    #    ###  #####`
 
-// buildHeader sets up the k9s-style strip shown above everything else:
-// connection context on the left, a keybinding legend in the middle, and
-// a wordmark/copyright/link block on the right. All three are populated
-// by updateHeaderInfo and the code below.
 func (a *App) buildHeader() {
 	a.headerInfo = tview.NewTextView().SetDynamicColors(true)
 	a.headerLegend = tview.NewTextView().SetDynamicColors(true)
@@ -203,8 +218,7 @@ func (a *App) buildHeader() {
 	a.updateHeaderInfo()
 }
 
-// updateHeaderInfo redraws the header's context column. Called at
-// startup and again whenever the tree switches which database is active.
+// updateHeaderInfo redraws the header's Host/User/Database column.
 func (a *App) updateHeaderInfo() {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[orange]%-10s[white]%s\n", translations.T("ui.header.host")+":", a.host)
@@ -241,10 +255,10 @@ func (a *App) buildTable() {
 
 // buildResultsText is the "w"-toggled alternative to the results table:
 // tview's Table can't wrap a cell across multiple lines, so wide/long
-// values there always end up truncated with an ellipsis. This renders
-// the same result set as one "column: value" block per row instead,
-// word-wrapped to the pane width, trading the grid layout for not
-// losing any data off the edge of the screen.
+// values there get truncated with an ellipsis. This renders the same
+// result set as one "column: value" block per row instead, word-wrapped
+// to the pane width. Populated lazily (see toggleWrap), not on every
+// query, since most queries are never viewed in this form.
 func (a *App) buildResultsText() {
 	a.resultsText = tview.NewTextView().
 		SetDynamicColors(true).
@@ -274,11 +288,10 @@ func (a *App) setResultsTitle(title string) {
 	a.resultsText.SetTitle(title)
 }
 
-// scrollSuffix reports, for a pane currently showing "visible" rows/lines
-// starting at "offset" out of "total", whether there's more content above
-// and/or below. ASCII only ("^"/"v"), never Unicode arrows or "[...]" --
-// both have already caused rendering bugs elsewhere in this tree (see the
-// icon constants above), so panel chrome sticks to plain characters too.
+// scrollSuffix reports, for a pane showing "visible" rows/lines starting at
+// "offset" out of "total", whether there's more content above and/or below.
+// ASCII only ("^"/"v"), for the same rendering-bug reasons as the tree
+// icons above.
 func scrollSuffix(offset, visible, total int) string {
 	canUp := offset > 0
 	canDown := offset+visible < total
@@ -294,11 +307,10 @@ func scrollSuffix(offset, visible, total int) string {
 	}
 }
 
-// refreshScrollIndicators recomputes the ^/v suffix on every panel that
-// can scroll, using each widget's own offset/size introspection. Hooked
-// up via Application.SetBeforeDrawFunc so it stays correct regardless of
-// what caused the redraw (arrow keys, PgUp/PgDn, new query results, a
-// terminal resize) without having to intercept every one of those individually.
+// refreshScrollIndicators recomputes the ^/v suffix on every panel that can
+// scroll. Hooked up via Application.SetBeforeDrawFunc so it stays correct
+// regardless of what caused the redraw, rather than having to intercept
+// every possible cause (arrow keys, PgUp/PgDn, new results, resize) individually.
 func (a *App) refreshScrollIndicators() {
 	_, _, _, h := a.tree.GetInnerRect()
 	a.tree.SetTitle(a.treeTitle + scrollSuffix(a.tree.GetScrollOffset(), h, a.tree.GetRowCount()))
@@ -327,10 +339,9 @@ func (a *App) buildQueryBar() {
 	a.queryBar.SetDoneFunc(a.onQueryBarDone)
 }
 
-// updateQueryBarLabel keeps the query bar's own label naming the
-// database it's about to run against, right where you're typing --
-// belt-and-suspenders alongside the header's Database: line, since
-// that's easy to miss while focused on the query bar itself.
+// updateQueryBarLabel names the target database right where you're typing
+// -- belt-and-suspenders alongside the header's Database: line, which is
+// easy to miss while focused on the query bar itself.
 func (a *App) updateQueryBarLabel() {
 	a.queryBar.SetLabel(translations.T("ui.query_label", a.database))
 }
@@ -412,31 +423,38 @@ func (a *App) setKeybindings() {
 	})
 }
 
+// focusRing is the order Tab/Shift+Tab cycle through: tree -> results
+// (whichever of table/wrapped-text is currently visible) -> index panel ->
+// query bar -> back to tree. Built fresh on every call since
+// resultsFocusTarget can change between calls.
+func (a *App) focusRing() []tview.Primitive {
+	return []tview.Primitive{a.tree, a.resultsFocusTarget(), a.indexPanel, a.queryBar}
+}
+
 func (a *App) cycleFocus() {
-	switch a.tv.GetFocus() {
-	case a.tree:
-		a.tv.SetFocus(a.resultsFocusTarget())
-	case a.resultsFocusTarget():
-		a.tv.SetFocus(a.indexPanel)
-	case a.indexPanel:
-		a.tv.SetFocus(a.queryBar)
-	default:
-		a.tv.SetFocus(a.tree)
-	}
+	a.cycleFocusBy(1)
 }
 
 // cycleFocusBack is Shift+Tab: the exact reverse of cycleFocus.
 func (a *App) cycleFocusBack() {
-	switch a.tv.GetFocus() {
-	case a.queryBar:
-		a.tv.SetFocus(a.indexPanel)
-	case a.indexPanel:
-		a.tv.SetFocus(a.resultsFocusTarget())
-	case a.resultsFocusTarget():
-		a.tv.SetFocus(a.tree)
-	default:
-		a.tv.SetFocus(a.queryBar)
+	a.cycleFocusBy(-1)
+}
+
+// cycleFocusBy moves focus delta steps around focusRing (wrapping in
+// either direction), landing on the tree if the current focus isn't a
+// member of the ring (e.g. at startup, before anything has been focused).
+func (a *App) cycleFocusBy(delta int) {
+	ring := a.focusRing()
+	cur := a.tv.GetFocus()
+	idx := 0
+	for i, p := range ring {
+		if p == cur {
+			idx = i
+			break
+		}
 	}
+	next := (idx + delta + len(ring)) % len(ring)
+	a.tv.SetFocus(ring[next])
 }
 
 // resultsFocusTarget is whichever of the table/wrapped-text results view
@@ -449,15 +467,19 @@ func (a *App) resultsFocusTarget() tview.Primitive {
 	return a.table
 }
 
-// toggleWrap is "w": swap the results pane between the grid table (fast
-// to scan, truncates long values) and the wrapped text view (shows every
-// value in full, one row per block). Both are kept populated with the
-// same data at all times, so switching is instant.
+// toggleWrap is "w": swap the results pane between the grid table (fast to
+// scan, truncates long values) and the wrapped text view (shows every value
+// in full). The wrapped view is rendered lazily here, the first time it's
+// switched to after a new result set arrives (see resultsTextDirty).
 func (a *App) toggleWrap() {
 	hadResultsFocus := a.tv.GetFocus() == a.table || a.tv.GetFocus() == a.resultsText
 
 	a.wrapped = !a.wrapped
 	if a.wrapped {
+		if a.resultsTextDirty && a.lastResult != nil {
+			a.renderResultsText(a.lastResult)
+			a.resultsTextDirty = false
+		}
 		a.resultsPages.SwitchToPage("text")
 	} else {
 		a.resultsPages.SwitchToPage("table")
@@ -490,25 +512,32 @@ func (a *App) loadDatabases() error {
 	return nil
 }
 
-// onTreeHighlightChanged fires as the highlighted tree node changes --
-// e.g. arrow-key navigation -- rather than only on Enter/click. Any node
-// under a database (the database node itself, or an already-expanded
-// schema/table beneath it) reconnects the live session as soon as it's
-// highlighted, so the header and query bar always reflect whichever
-// database the cursor is currently sitting in, without needing to
-// re-open that database's own node first.
+// onTreeHighlightChanged fires as the tree cursor moves -- e.g. arrow-key
+// navigation -- rather than only on Enter/click, so the header and query
+// bar end up reflecting whichever database the cursor settles on (see
+// highlightSwitchDelay) without needing to re-open that database's node first.
 func (a *App) onTreeHighlightChanged(node *tview.TreeNode) {
 	ref, ok := node.GetReference().(*nodeData)
 	if !ok || ref.dbname == "" || ref.dbname == a.database {
 		return
 	}
-	if err := a.br.DB.SwitchDatabase(a.ctx, ref.dbname); err != nil {
-		a.showError(err)
-		return
-	}
-	a.database = ref.dbname
-	a.updateHeaderInfo()
-	a.updateQueryBarLabel()
+	a.highlightGen++
+	gen := a.highlightGen
+	dbname := ref.dbname
+	time.AfterFunc(highlightSwitchDelay, func() {
+		a.tv.QueueUpdateDraw(func() {
+			if gen != a.highlightGen {
+				return // superseded by a later highlight change
+			}
+			if err := a.br.DB.SwitchDatabase(a.ctx, dbname); err != nil {
+				a.showError(err)
+				return
+			}
+			a.database = dbname
+			a.updateHeaderInfo()
+			a.updateQueryBarLabel()
+		})
+	})
 }
 
 func (a *App) onTreeSelect(node *tview.TreeNode) {
@@ -554,17 +583,27 @@ func (a *App) onTreeSelect(node *tview.TreeNode) {
 	}
 }
 
+// addChildNodes appends one tree child per name in items, tagged with icon
+// and colored with color, referencing a *nodeData built by makeRef. Shared
+// by loadSchemas/loadTables, which differ only in icon/color and which
+// nodeData fields the child carries.
+func addChildNodes(node *tview.TreeNode, items []string, icon string, color tcell.Color, makeRef func(name string) *nodeData) {
+	for _, name := range items {
+		child := tview.NewTreeNode(icon + " " + name).
+			SetReference(makeRef(name)).
+			SetColor(color)
+		node.AddChild(child)
+	}
+}
+
 func (a *App) loadSchemas(node *tview.TreeNode, ref *nodeData) error {
 	schemas, err := a.br.Schemas(a.ctx, ref.dbname)
 	if err != nil {
 		return err
 	}
-	for _, s := range schemas {
-		child := tview.NewTreeNode(schemaIcon + " " + s).
-			SetReference(&nodeData{kind: kindSchema, dbname: ref.dbname, schema: s}).
-			SetColor(tcell.ColorGreen)
-		node.AddChild(child)
-	}
+	addChildNodes(node, schemas, schemaIcon, tcell.ColorGreen, func(s string) *nodeData {
+		return &nodeData{kind: kindSchema, dbname: ref.dbname, schema: s}
+	})
 	ref.loaded = true
 	return nil
 }
@@ -574,12 +613,9 @@ func (a *App) loadTables(node *tview.TreeNode, ref *nodeData) error {
 	if err != nil {
 		return err
 	}
-	for _, t := range tables {
-		child := tview.NewTreeNode(tableIcon + " " + t).
-			SetReference(&nodeData{kind: kindTable, dbname: ref.dbname, schema: ref.schema, table: t}).
-			SetColor(tcell.ColorAqua)
-		node.AddChild(child)
-	}
+	addChildNodes(node, tables, tableIcon, tcell.ColorAqua, func(t string) *nodeData {
+		return &nodeData{kind: kindTable, dbname: ref.dbname, schema: ref.schema, table: t}
+	})
 	ref.loaded = true
 	return nil
 }
@@ -713,9 +749,18 @@ func (a *App) setResults(result *db.QueryResult) {
 	}
 	a.table.ScrollToBeginning()
 
-	a.renderResultsText(result)
+	a.lastResult = result
+	a.resultsTextDirty = true
+	if a.wrapped {
+		a.renderResultsText(result)
+		a.resultsTextDirty = false
+	}
 
-	a.setResultsTitle(translations.T("ui.results_title_rows", len(result.Rows)))
+	if result.Truncated {
+		a.setResultsTitle(translations.T("ui.results_title_truncated", len(result.Rows)))
+	} else {
+		a.setResultsTitle(translations.T("ui.results_title_rows", len(result.Rows)))
+	}
 }
 
 // renderResultsText fills in the wrapped-text alternative to the results

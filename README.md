@@ -4,7 +4,7 @@
   <img src="docs/screenshot.png" alt="pgtui screenshot" width="800">
 </p>
 
-A very small terminal UI for administering a postgres database in the terminal, focused on simple tasks a software developer would perform. Insipried by Midnight Commander and k9s in look and feel
+A very small terminal UI for administering a postgres database in the terminal, focused on simple tasks a software developer would perform. Inspired by Midnight Commander and k9s in look and feel
 
 Wrote it due to RAM considerations of running pgadmin on a MacBook Neo (8GB RAM) - so designed to be very lightweight and efficient.
 
