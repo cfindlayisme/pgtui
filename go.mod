@@ -9,7 +9,7 @@ require (
 	github.com/pashagolub/pgxmock/v3 v3.4.0
 	github.com/pashagolub/pgxmock/v5 v5.1.0
 	github.com/rivo/tview v0.42.0
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	golang.org/x/term v0.45.0
 )
 
