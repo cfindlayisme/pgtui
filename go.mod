@@ -5,9 +5,9 @@ go 1.26.0
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/gdamore/tcell/v3 v3.5.0
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/pashagolub/pgxmock/v3 v3.4.0
-	github.com/pashagolub/pgxmock/v5 v5.1.0
+	github.com/pashagolub/pgxmock/v5 v5.2.0
 	github.com/rivo/tview v0.42.0
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/term v0.46.0
