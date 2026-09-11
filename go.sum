@@ -9,6 +9,7 @@ github.com/gdamore/tcell/v2 v2.13.10 h1:Afs3JKt83HnhuUKdZ3MnxUgOqQRWftj5JyDqv1LL
 github.com/gdamore/tcell/v2 v2.13.10/go.mod h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=
 github.com/gdamore/tcell/v3 v3.4.1/go.mod h1:YWwuxZNi14VGQC5g2VGNEDRXpBraTwvVjMovRH6G6hw=
 github.com/gdamore/tcell/v3 v3.4.2/go.mod h1:Oe5U3S3jm3NzypswDNUhe+LUnF5CoFq2b4sepD++QHo=
+github.com/gdamore/tcell/v3 v3.5.0/go.mod h1:Oe5U3S3jm3NzypswDNUhe+LUnF5CoFq2b4sepD++QHo=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
