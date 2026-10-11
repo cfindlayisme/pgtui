@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
-	github.com/gdamore/tcell/v3 v3.5.0
+	github.com/gdamore/tcell/v3 v3.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pashagolub/pgxmock/v3 v3.4.0
 	github.com/pashagolub/pgxmock/v5 v5.1.0
@@ -25,8 +25,8 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
